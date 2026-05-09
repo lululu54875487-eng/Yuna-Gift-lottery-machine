@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<title>🎁 小U0贈物抽獎機</title>
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  padding:20px;
+  background:#fff6fb;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC",sans-serif;
+  color:#444;
+}
+
+.container{
+  max-width:900px;
+  margin:auto;
+}
+
+.title{
+  text-align:center;
+  font-size:34px;
+  font-weight:900;
+  color:#ff5ca8;
+  margin-bottom:10px;
+}
+
+.subtitle{
+  text-align:center;
+  color:#888;
+  margin-bottom:25px;
+}
+
+.card{
+  background:white;
+  border-radius:20px;
+  padding:20px;
+  box-shadow:0 5px 20px rgba(0,0,0,0.08);
+  margin-bottom:20px;
+}
+
+textarea{
+  width:100%;
+  border:none;
+  background:#fff8fc;
+  border-radius:16px;
+  padding:15px;
+  font-size:16px;
+  resize:vertical;
+  outline:none;
+  line-height:1.7;
+  font-family:inherit;
+}
+
+#input{
+  min-height:220px;
+}
+
+#vipInput{
+  min-height:100px;
+}
+
+.btns{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:15px;
+}
+
+button{
+  border:none;
+  border-radius:14px;
+  padding:14px 20px;
+  font-size:16px;
+  cursor:pointer;
+  font-weight:700;
+  transition:0.2s;
+}
+
+button:hover{
+  transform:scale(1.03);
+}
+
+.primary{
+  background:#ff5ca8;
+  color:white;
+}
+
+.secondary{
+  background:#ffe3f1;
+  color:#ff3f97;
+}
+
+.danger{
+  background:#ffdede;
+  color:#ff3d3d;
+}
+
+.result{
+  white-space:pre-wrap;
+  line-height:1.8;
+  font-size:16px;
+}
+
+.gacha-box{
+  text-align:center;
+  padding:25px;
+}
+
+.gacha-machine{
+  font-size:90px;
+  animation:bounce 1s infinite;
+}
+
+@keyframes bounce{
+  0%,100%{
+    transform:translateY(0);
+  }
+  50%{
+    transform:translateY(-10px);
+  }
+}
+
+.rolling{
+  font-size:34px;
+  font-weight:900;
+  color:#ff4d9a;
+  min-height:70px;
+  margin-top:15px;
+}
+
+.final{
+  font-size:42px;
+  color:#ff1493;
+  font-weight:900;
+  animation:pop 0.5s;
+}
+
+@keyframes pop{
+  0%{
+    transform:scale(0.5);
+    opacity:0;
+  }
+  100%{
+    transform:scale(1);
+    opacity:1;
+  }
+}
+
+.vip-box{
+  margin-top:18px;
+  background:#fff8fc;
+  border-radius:16px;
+  padding:15px;
+}
+
+.vip-title{
+  font-weight:900;
+  color:#ff4f9f;
+  margin-bottom:10px;
+}
+
+.vip-hint{
+  margin-top:8px;
+  color:#999;
+  font-size:13px;
+}
+
+.watermark{
+  text-align:center;
+  margin-top:30px;
+  color:#ff8fc4;
+  font-size:13px;
+}
+
+.confetti{
+  position:fixed;
+  width:10px;
+  height:10px;
+  top:-10px;
+  animation:fall linear forwards;
+  z-index:9999;
+}
+
+@keyframes fall{
+  to{
+    transform:translateY(110vh) rotate(720deg);
+    opacity:0;
+  }
+}
+
+@media(max-width:480px){
+
+  .title{
+    font-size:28px;
+  }
+
+  .rolling{
+    font-size:28px;
+  }
+
+  .final{
+    font-size:34px;
+  }
+
+  button{
+    width:100%;
+  }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="title">
+    🎁 小U0贈物抽獎機
+    <br>
+    💩by 璐璐璐
+  </div>
+
+  <div class="subtitle">
+    ✨贈物抽獎用｜多人撞號自動抽選｜特權指定模式✨
+  </div>
+
+  <div class="card">
+
+    <div class="vip-title">
+      🧾 清單貼這裡（必填）
+    </div>
+
+<textarea id="input" placeholder="格式：
+璐璐：1、16、23
+抽抽：20、15"></textarea>
+
+    <div class="vip-box">
+
+      <div class="vip-title">
+        👑 特權指定得主（可不填）
+      </div>
+
+<textarea id="vipInput" placeholder="格式：
+21：璐璐
+35：抽抽"></textarea>
+
+      <div class="vip-hint">
+        有填寫的號碼將直接指定，不會參加抽獎
+      </div>
+
+    </div>
+
+    <div class="btns">
+
+      <button class="primary" onclick="startLottery()">
+        🎰 開始抽獎
+      </button>
+
+      <button class="secondary" onclick="skipAnimation()">
+        ⏩ 跳過動畫
+      </button>
+
+      <button class="secondary" onclick="copyResult()">
+        📋 複製結果
+      </button>
+
+      <button class="secondary" onclick="clearResult()">
+        🧹 清空結果
+      </button>
+
+      <button class="danger" onclick="clearAll()">
+        🗑️ 清空清單＋結果
+      </button>
+
+    </div>
+
+  </div>
+
+  <div class="card gacha-box">
+
+    <div class="gacha-machine">
+      🧸
+    </div>
+
+    <div id="rollingText" class="rolling">
+      等待抽獎中...
+    </div>
+
+  </div>
+
+  <div class="card">
+
+    <div class="result" id="result">
+尚未抽獎
+    </div>
+
+  </div>
+
+  <div class="watermark">
+    ❗️限廢物公司使用｜禁止外流｜by 璐璐璐✨
+  </div>
+
+</div>
+
+<script>
+
+let skipMode = false;
+
+function sleep(ms){
+
+  if(skipMode){
+    return Promise.resolve();
+  }
+
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function randomPick(arr){
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function createConfetti(){
+
+  if(skipMode) return;
+
+  for(let i=0;i<80;i++){
+
+    const confetti=document.createElement("div");
+
+    confetti.className="confetti";
+
+    confetti.style.left=Math.random()*100+"vw";
+
+    confetti.style.background=
+      `hsl(${Math.random()*360},100%,70%)`;
+
+    confetti.style.animationDuration=
+      (Math.random()*3+2)+"s";
+
+    confetti.style.width=
+      confetti.style.height=
+      (Math.random()*10+5)+"px";
+
+    document.body.appendChild(confetti);
+
+    setTimeout(()=>{
+      confetti.remove();
+    },5000);
+  }
+}
+
+async function startLottery(){
+
+  skipMode = false;
+
+  const input=
+    document.getElementById("input").value.trim();
+
+  if(!input){
+    alert("請輸入抽獎清單");
+    return;
+  }
+
+  const lines=input.split("\n");
+
+  const wants={};
+  const numberMap={};
+
+  for(let line of lines){
+
+    if(!line.includes("：")) continue;
+
+    let [name, nums]=line.split("：");
+
+    name=name.trim();
+
+    nums=nums
+      .replaceAll("，",",")
+      .replaceAll("、",",");
+
+    const arr=nums
+      .split(",")
+      .map(v=>v.trim())
+      .filter(v=>v);
+
+    wants[name]=[];
+
+    for(let num of arr){
+
+      wants[name].push(num);
+
+      if(!numberMap[num]){
+        numberMap[num]=[];
+      }
+
+      numberMap[num].push(name);
+    }
+  }
+
+  const vipText=
+    document.getElementById("vipInput").value.trim();
+
+  const vipMap={};
+
+  if(vipText){
+
+    const vipLines=vipText.split("\n");
+
+    for(let line of vipLines){
+
+      if(!line.includes("：")) continue;
+
+      let [num,name]=line.split("：");
+
+      num=num.trim();
+      name=name.trim();
+
+      vipMap[num]=name;
+    }
+  }
+
+  const resultMap={};
+
+  for(let name in wants){
+    resultMap[name]=[];
+  }
+
+  for(let vipName of Object.values(vipMap)){
+
+    if(!resultMap[vipName]){
+      resultMap[vipName]=[];
+    }
+  }
+
+  const rolling=
+    document.getElementById("rollingText");
+
+  rolling.innerHTML="🎰 抽獎開始！";
+
+  await sleep(1000);
+
+  const numbers=
+    Object.keys(numberMap)
+    .sort((a,b)=>Number(a)-Number(b));
+
+  for(let num of numbers){
+
+    const players=numberMap[num];
+
+    if(vipMap[num]){
+
+      const vipWinner=vipMap[num];
+
+      rolling.innerHTML=
+        `👑 ${num} 號為特權指定<br>
+        <span class="final">${vipWinner}</span>`;
+
+      resultMap[vipWinner].push(num);
+
+      createConfetti();
+
+      await sleep(1500);
+
+      continue;
+    }
+
+    rolling.innerHTML=
+      `🎁 正在抽 ${num} 號`;
+
+    await sleep(700);
+
+    let winner="";
+
+    if(players.length===1){
+
+      winner=players[0];
+
+      rolling.innerHTML=
+        `✨ ${num} 號直接得主：<br>
+        <span class="final">${winner}</span>`;
+
+    }else{
+
+      for(let i=0;i<(skipMode ? 1 : 15);i++){
+
+        rolling.innerHTML=
+          `🎰 ${num} 號抽選中...<br>
+          <span class="final">
+          ${randomPick(players)}
+          </span>`;
+
+        await sleep(80);
+      }
+
+      winner=randomPick(players);
+
+      rolling.innerHTML=
+        `🎉 ${num} 號得主：<br>
+        <span class="final">${winner}</span>`;
+    }
+
+    resultMap[winner].push(num);
+
+    createConfetti();
+
+    await sleep(1500);
+  }
+
+  let output="🎁 抽選結果清單\n\n";
+
+  for(let name in resultMap){
+
+    const items=resultMap[name];
+
+    output+=`${name}：\n`;
+
+    if(items.length){
+
+      items.sort((a,b)=>a-b);
+
+      output+=items.join("、");
+      output+=`\n（共${items.length}樣）`;
+		output+=`\n寄編：`;
+
+    }else{
+
+      output+="未抽中";
+    }
+
+    output+="\n\n";
+  }
+
+  output+="📦 各號碼得主對照\n\n";
+
+  const allResults=[];
+
+  for(let name in resultMap){
+
+    for(let num of resultMap[name]){
+
+      allResults.push({
+        num:Number(num),
+        name
+      });
+    }
+  }
+
+  allResults.sort((a,b)=>a.num-b.num);
+
+  for(let item of allResults){
+
+    output+=`${item.num} ➡️ ${item.name}\n`;
+  }
+
+  document.getElementById("result").innerText=
+    output;
+
+  rolling.innerHTML=
+    "🎊 全部抽獎完成！";
+}
+
+function skipAnimation(){
+
+  skipMode = true;
+
+  document.getElementById("rollingText").innerHTML =
+    "⏩ 已跳過後續動畫";
+}
+
+function copyResult(){
+
+  const text=
+    document.getElementById("result").innerText;
+
+  navigator.clipboard.writeText(text);
+
+  alert("已複製抽獎結果 ✨");
+}
+
+function clearResult(){
+
+  document.getElementById("result").innerText=
+    "尚未抽獎";
+
+  document.getElementById("rollingText").innerHTML=
+    "等待抽獎中...";
+}
+
+function clearAll(){
+
+  if(!confirm("確定要清空全部內容嗎？")){
+    return;
+  }
+
+  document.getElementById("input").value="";
+
+  document.getElementById("vipInput").value="";
+
+  document.getElementById("result").innerText=
+    "尚未抽獎";
+
+  document.getElementById("rollingText").innerHTML=
+    "等待抽獎中...";
+}
+
+</script>
+
+</body>
+</html>
