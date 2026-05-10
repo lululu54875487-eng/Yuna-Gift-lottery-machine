@@ -418,6 +418,8 @@ async function startLottery(){
 
     for(let line of vipLines){
 
+      line = line.replaceAll(":", "：");
+
       if(!line.includes("：")) continue;
 
       let [num,name]=line.split("：");
