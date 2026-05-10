@@ -379,6 +379,8 @@ async function startLottery(){
   for(let line of lines){
 
     if(!line.includes("：")) continue;
+    
+    line = line.replaceAll(":", "：");
 
     let [name, nums]=line.split("：");
 
