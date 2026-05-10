@@ -526,15 +526,14 @@ async function startLottery(){
 
     const items=resultMap[name];
 
-    output+=`${name}：\n`;
+    output+=`${name}：`;
 
     if(items.length){
 
       items.sort((a,b)=>a-b);
 
       output+=items.join("、");
-      output+=`\n（共${items.length}樣）`;
-		output+=`\n寄編：`;
+      output+=`\n（共${items.length}樣）寄編：`;
 
     }else{
 
