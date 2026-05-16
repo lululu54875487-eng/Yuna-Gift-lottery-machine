@@ -371,18 +371,27 @@ async function startLottery(){
     return;
   }
 
-  const lines=input.split("\n");
+const lines=input
+  .split("\n")
+  .map(v=>v.trim())
+  .filter(v=>v);
 
   const wants={};
   const numberMap={};
 
   for(let line of lines){
 
-    if(!line.includes("：")) continue;
-    
-    line = line.replaceAll(":", "：");
+line = line
 
-    let [name, nums]=line.split("：");
+  .replaceAll(":", "：")
+
+  .replaceAll("➡️", "：")
+
+  .replaceAll("->", "：");
+
+if(!line.includes("：")) continue;
+
+let [name, nums]=line.split("：");
 
     name=name.trim();
 
@@ -420,7 +429,13 @@ async function startLottery(){
 
     for(let line of vipLines){
 
-      line = line.replaceAll(":", "：");
+    line = line
+
+      .replaceAll(":", "：")
+
+      .replaceAll("➡️", "：")
+
+      .replaceAll("->", "：");
 
       if(!line.includes("：")) continue;
 
