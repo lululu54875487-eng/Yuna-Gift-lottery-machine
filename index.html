@@ -288,9 +288,9 @@ button:hover{
 
   <div class="card gacha-box">
 
-    <div class="gacha-machine">
-      🧸
-    </div>
+  <div class="gacha-machine" id="machineIcon">
+    🧸
+  </div>
 
     <div id="rollingText" class="rolling">
       等待抽獎中...
@@ -375,7 +375,66 @@ const lines=input
   .split("\n")
   .map(v=>v.trim())
   .filter(v=>v);
+// ===== 單純抽一人模式 =====
 
+const isSimpleMode =
+  !input.includes("：") &&
+  !input.includes(":") &&
+  !input.includes("➡️");
+
+if(isSimpleMode){
+document.getElementById("machineIcon").innerHTML = "🎰";
+  const players = input
+  .replaceAll("，",",")
+  .replaceAll("、",",")
+  .replaceAll("\n",",")
+  .split(",")
+    .map(v=>v.trim())
+    .filter(v=>v);
+
+  if(players.length < 2){
+    alert("至少需要兩位參加者");
+    return;
+  }
+
+  const rolling =
+    document.getElementById("rollingText");
+
+  rolling.innerHTML = "🎰 抽籤開始！";
+
+  await sleep(800);
+
+  for(let i=0;i<(skipMode ? 1 : 20);i++){
+
+    rolling.innerHTML =
+      `🎲 抽籤中...<br>
+      <span class="final">
+      ${randomPick(players)}
+      </span>`;
+
+    await sleep(80);
+  }
+
+  const winner = randomPick(players);
+
+  rolling.innerHTML =
+    `🎉 本次中獎者<br>
+    <span class="final">
+    ${winner}
+    </span>`;
+
+  createConfetti();
+
+  document.getElementById("result").innerText =
+`🎉 本次抽籤結果：
+
+✨ ${winner} ✨`;
+
+${winner}`;
+
+  return;
+}
+document.getElementById("machineIcon").innerHTML = "🧸";
   const wants={};
   const numberMap={};
 
@@ -608,10 +667,15 @@ function copyResult(){
 function clearResult(){
 
   document.getElementById("result").innerText=
+
     "尚未抽獎";
 
   document.getElementById("rollingText").innerHTML=
+
     "等待抽獎中...";
+
+  document.getElementById("machineIcon").innerHTML = "🧸";
+
 }
 
 function clearAll(){
@@ -629,6 +693,8 @@ function clearAll(){
 
   document.getElementById("rollingText").innerHTML=
     "等待抽獎中...";
+    
+    document.getElementById("machineIcon").innerHTML = "🧸";
 }
 
 </script>
