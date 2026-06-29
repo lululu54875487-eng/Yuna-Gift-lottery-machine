@@ -68,6 +68,25 @@ textarea{
   min-height:100px;
 }
 
+.list-title-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+
+.list-title-row .vip-title{
+  margin-bottom:0;
+}
+
+.compact-button{
+  padding:9px 14px;
+  font-size:14px;
+  border-radius:12px;
+}
+
 .btns{
   display:flex;
   gap:12px;
@@ -236,8 +255,13 @@ button:hover{
 
   <div class="card">
 
-    <div class="vip-title">
-      🧾 清單貼這裡（必填）
+    <div class="list-title-row">
+      <div class="vip-title">
+        🧾 清單貼這裡（必填）
+      </div>
+      <button class="secondary compact-button" type="button" onclick="convertInputToHalfWidth()">
+        🔤 全形轉半形
+      </button>
     </div>
 
 <textarea id="input" placeholder="抽贈物格式：（：也可用➡️、也可用.隔開）
@@ -329,6 +353,57 @@ function sleep(ms){
 
 function randomPick(arr){
   return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function toHalfWidth(text){
+
+  const punctuationMap={
+    "　":" ",
+    "、":",",
+    "。":".",
+    "「":"\"",
+    "」":"\"",
+    "『":"'",
+    "』":"'",
+    "【":"[",
+    "】":"]",
+    "〔":"[",
+    "〕":"]",
+    "《":"<",
+    "》":">",
+    "〈":"<",
+    "〉":">",
+    "～":"~",
+    "—":"-",
+    "－":"-",
+    "…":"..."
+  };
+
+  return text.replace(/[！-～　、。「」『』【】〔〕《》〈〉—…]/g, char => {
+
+    if(punctuationMap[char]){
+      return punctuationMap[char];
+    }
+
+    return String.fromCharCode(char.charCodeAt(0)-0xFEE0);
+  });
+}
+
+function convertInputToHalfWidth(){
+
+  const input=document.getElementById("input");
+  const original=input.value;
+  const converted=toHalfWidth(original);
+
+  if(!original){
+    alert("請先貼上清單");
+    return;
+  }
+
+  input.value=converted;
+  input.focus();
+
+  alert(original===converted ? "清單中沒有需要轉換的全形字元" : "已將清單轉換成半形符號與英數字");
 }
 
 function createConfetti(){
