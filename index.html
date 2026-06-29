@@ -262,6 +262,9 @@ button:hover{
       <button class="secondary compact-button" type="button" onclick="convertInputToHalfWidth()">
         🔤 全形轉半形
       </button>
+      <button class="secondary compact-button" type="button" onclick="checkSimilarInputItems()">
+        🔎 檢查疑似重複
+      </button>
     </div>
 
 <textarea id="input" placeholder="抽贈物格式：（：也可用➡️、也可用.隔開）
@@ -404,6 +407,87 @@ function convertInputToHalfWidth(){
   input.focus();
 
   alert(original===converted ? "清單中沒有需要轉換的全形字元" : "已將清單轉換成半形符號與英數字");
+}
+
+function normalizeForSimilarity(text){
+
+  return toHalfWidth(text)
+    .toLowerCase()
+    .replace(/\s+/g,"")
+    .trim();
+}
+
+function extractInputItems(text){
+
+  const items=[];
+  const lines=text
+    .split("\n")
+    .map(v=>v.trim())
+    .filter(v=>v);
+
+  for(let line of lines){
+
+    line=line
+      .replaceAll("：",":")
+      .replaceAll("➡️",":")
+      .replaceAll("->",":");
+
+    const itemText=line.includes(":")
+      ? line.split(":").slice(1).join(":")
+      : line;
+
+    itemText
+      .replaceAll("，",",")
+      .replaceAll("、",",")
+      .split(",")
+      .map(v=>v.trim())
+      .filter(v=>v)
+      .forEach(item=>items.push(item));
+  }
+
+  return items;
+}
+
+function checkSimilarInputItems(){
+
+  const input=document.getElementById("input");
+  const original=input.value;
+
+  if(!original.trim()){
+    alert("請先貼上清單");
+    return;
+  }
+
+  const groups={};
+
+  for(let item of extractInputItems(original)){
+
+    const key=normalizeForSimilarity(item);
+
+    if(!key) continue;
+
+    if(!groups[key]){
+      groups[key]=[];
+    }
+
+    if(!groups[key].includes(item)){
+      groups[key].push(item);
+    }
+  }
+
+  const suspects=Object.values(groups)
+    .filter(group=>group.length>1);
+
+  if(!suspects.length){
+    alert("沒有發現疑似因輸入法或英文大小寫造成的重複項目");
+    return;
+  }
+
+  const message=suspects
+    .map((group,index)=>`${index+1}. ${group.join(" / ")}`)
+    .join("\n");
+
+  alert(`發現 ${suspects.length} 組疑似相同的項目：\n\n${message}\n\n請確認它們是真的不同獎品，還是只是輸入法、全半形或英文大小寫不同。`);
 }
 
 function createConfetti(){
