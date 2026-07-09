@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8" />
@@ -193,6 +193,54 @@ button:hover{
   font-size:13px;
 }
 
+.setting-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+
+.setting-label{
+  font-weight:800;
+  color:#666;
+}
+
+.setting-control{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+select{
+  border:none;
+  border-radius:12px;
+  background:white;
+  color:#ff3f97;
+  font-family:inherit;
+  font-size:15px;
+  font-weight:800;
+  padding:9px 12px;
+  outline:none;
+}
+
+.checkbox-label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#666;
+  font-weight:800;
+  line-height:1.5;
+}
+
+.checkbox-label input{
+  width:18px;
+  height:18px;
+  accent-color:#ff5ca8;
+}
+
 .watermark{
   text-align:center;
   margin-top:30px;
@@ -289,6 +337,46 @@ button:hover{
 
     </div>
 
+    <div class="vip-box">
+
+      <div class="vip-title">
+        ⚙️ 中獎限制
+      </div>
+
+      <div class="setting-row">
+        <label class="setting-label" for="maxWins">
+          每人最多中幾樣
+        </label>
+        <div class="setting-control">
+          <select id="maxWins">
+            <option value="unlimited" selected>不限</option>
+            <option value="1">1 樣</option>
+            <option value="2">2 樣</option>
+            <option value="3">3 樣</option>
+            <option value="4">4 樣</option>
+            <option value="5">5 樣</option>
+            <option value="6">6 樣</option>
+            <option value="7">7 樣</option>
+            <option value="8">8 樣</option>
+            <option value="9">9 樣</option>
+            <option value="10">10 樣</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label class="checkbox-label" for="vipCountsTowardLimit">
+          <input id="vipCountsTowardLimit" type="checkbox" checked>
+          VIP 指定贈物也佔用中獎數
+        </label>
+      </div>
+
+      <div class="vip-hint">
+        選擇 1～10 時，已達上限的人不會再參加後續隨機抽選
+      </div>
+
+    </div>
+
     <div class="btns">
 
       <button class="primary" onclick="startLottery()">
@@ -356,6 +444,19 @@ function sleep(ms){
 
 function randomPick(arr){
   return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function getLotterySettings(){
+
+  const maxWinsValue=
+    document.getElementById("maxWins").value;
+
+  return {
+    maxWins:maxWinsValue==="unlimited" ? Infinity : Number(maxWinsValue),
+    hasWinLimit:maxWinsValue!=="unlimited",
+    vipCountsTowardLimit:
+      document.getElementById("vipCountsTowardLimit").checked
+  };
 }
 
 function toHalfWidth(text){
@@ -666,16 +767,51 @@ let [name, nums]=line.split("：");
     }
   }
 
+  const settings=getLotterySettings();
+  const reservedVipCounts={};
+
+  if(settings.hasWinLimit && settings.vipCountsTowardLimit){
+
+    for(let vipName of Object.values(vipMap)){
+
+      if(!reservedVipCounts[vipName]){
+        reservedVipCounts[vipName]=0;
+      }
+
+      reservedVipCounts[vipName]++;
+    }
+  }
+
   const resultMap={};
+  const winCount={};
+  const unassignedResults=[];
 
   for(let name in wants){
     resultMap[name]=[];
+    winCount[name]=reservedVipCounts[name] || 0;
   }
 
   for(let vipName of Object.values(vipMap)){
 
     if(!resultMap[vipName]){
       resultMap[vipName]=[];
+    }
+
+    if(winCount[vipName]===undefined){
+      winCount[vipName]=reservedVipCounts[vipName] || 0;
+    }
+  }
+
+  if(settings.hasWinLimit && settings.vipCountsTowardLimit){
+
+    const vipOverLimitNames=Object.keys(reservedVipCounts)
+      .filter(name=>reservedVipCounts[name] > settings.maxWins);
+
+    if(vipOverLimitNames.length){
+
+      alert(
+        `提醒：${vipOverLimitNames.join("、")} 的 VIP 指定數已超過每人最多 ${settings.maxWins} 樣，指定贈物仍會照常分配。`
+      );
     }
   }
 
@@ -693,6 +829,9 @@ let [name, nums]=line.split("：");
   for(let num of numbers){
 
     const players=numberMap[num];
+    const eligiblePlayers=settings.hasWinLimit
+      ? players.filter(name=>(winCount[name] || 0) < settings.maxWins)
+      : players;
 
     if(vipMap[num]){
 
@@ -711,6 +850,22 @@ let [name, nums]=line.split("：");
       continue;
     }
 
+    if(!eligiblePlayers.length){
+
+      rolling.innerHTML=
+        `⚠️ ${num} 號無可抽選得主<br>
+        <span class="final">已達上限</span>`;
+
+      unassignedResults.push({
+        num,
+        reason:"所有填選者已達中獎上限"
+      });
+
+      await sleep(1200);
+
+      continue;
+    }
+
     rolling.innerHTML=
       `🎁 正在抽 ${num} 號`;
 
@@ -718,9 +873,9 @@ let [name, nums]=line.split("：");
 
     let winner="";
 
-    if(players.length===1){
+    if(eligiblePlayers.length===1){
 
-      winner=players[0];
+      winner=eligiblePlayers[0];
 
       rolling.innerHTML=
         `✨ ${num} 號直接得主：<br>
@@ -733,13 +888,13 @@ let [name, nums]=line.split("：");
         rolling.innerHTML=
           `🎰 ${num} 號抽選中...<br>
           <span class="final">
-          ${randomPick(players)}
+          ${randomPick(eligiblePlayers)}
           </span>`;
 
         await sleep(80);
       }
 
-      winner=randomPick(players);
+      winner=randomPick(eligiblePlayers);
 
       rolling.innerHTML=
         `🎉 ${num} 號得主：<br>
@@ -748,12 +903,24 @@ let [name, nums]=line.split("：");
 
     resultMap[winner].push(num);
 
+    if(settings.hasWinLimit){
+      winCount[winner]=(winCount[winner] || 0)+1;
+    }
+
     createConfetti();
 
     await sleep(1500);
   }
 
   let output="🎁 抽選結果清單\n\n";
+
+  if(settings.hasWinLimit){
+
+    output+=`⚙️ 中獎限制：每人最多 ${settings.maxWins} 樣`;
+    output+=settings.vipCountsTowardLimit
+      ? "｜VIP 指定計入中獎數\n\n"
+      : "｜VIP 指定不計入中獎數\n\n";
+  }
 
   for(let name in resultMap){
 
@@ -796,6 +963,15 @@ let [name, nums]=line.split("：");
   for(let item of allResults){
 
     output+=`${item.num} ➡️ ${item.name}\n`;
+  }
+
+  if(unassignedResults.length){
+
+    output+="\n⚠️ 未抽出號碼\n\n";
+
+    for(let item of unassignedResults){
+      output+=`${item.num}：${item.reason}\n`;
+    }
   }
 
   document.getElementById("result").innerText=
