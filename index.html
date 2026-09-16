@@ -214,7 +214,8 @@ button:hover{
   flex-wrap:wrap;
 }
 
-select{
+select,
+input[type="number"]{
   border:none;
   border-radius:12px;
   background:white;
@@ -224,6 +225,10 @@ select{
   font-weight:800;
   padding:9px 12px;
   outline:none;
+}
+
+input[type="number"]{
+  width:90px;
 }
 
 .checkbox-label{
@@ -365,6 +370,16 @@ select{
       </div>
 
       <div class="setting-row">
+        <label class="setting-label" for="drawCount">
+          抽籤抽幾位
+        </label>
+        <div class="setting-control">
+          <input id="drawCount" type="number" min="1" step="1" value="1">
+          <span class="setting-label">位</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
         <label class="checkbox-label" for="vipCountsTowardLimit">
           <input id="vipCountsTowardLimit" type="checkbox" checked>
           VIP 指定贈物也佔用中獎數
@@ -444,6 +459,31 @@ function sleep(ms){
 
 function randomPick(arr){
   return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function randomSample(arr, count){
+
+  const pool=[...arr];
+  const picked=[];
+
+  while(picked.length<count && pool.length){
+
+    const index=Math.floor(Math.random()*pool.length);
+    picked.push(pool.splice(index,1)[0]);
+  }
+
+  return picked;
+}
+
+function getDrawCount(playerCount){
+
+  const value=Number(document.getElementById("drawCount").value);
+
+  if(!Number.isInteger(value) || value<1){
+    return 1;
+  }
+
+  return Math.min(value, playerCount);
 }
 
 function getLotterySettings(){
@@ -659,6 +699,8 @@ document.getElementById("machineIcon").innerHTML = "🎰";
     return;
   }
 
+  const drawCount=getDrawCount(players.length);
+
   const rolling =
     document.getElementById("rollingText");
 
@@ -677,12 +719,13 @@ document.getElementById("machineIcon").innerHTML = "🎰";
     await sleep(80);
   }
 
-  const winner = randomPick(players);
+  const winners = randomSample(players, drawCount);
+  const winnerText = winners.join("、");
 
   rolling.innerHTML =
-    `🎉 本次中獎者<br>
+    `🎉 本次中獎者${drawCount>1 ? "們" : ""}<br>
     <span class="final">
-    ${winner}
+    ${winnerText}
     </span>`;
 
   createConfetti();
@@ -690,7 +733,7 @@ document.getElementById("machineIcon").innerHTML = "🎰";
   document.getElementById("result").innerText =
 `🎉 本次抽籤結果：
 
-✨ ${winner} ✨`;
+${winners.map((winner,index)=>`${index+1}. ✨ ${winner} ✨`).join("\n")}`;
 
   return;
 }
