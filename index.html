@@ -475,6 +475,76 @@ function randomSample(arr, count){
   return picked;
 }
 
+function chineseNumberToNumber(text){
+
+  const digitMap={
+    "零":0,
+    "一":1,
+    "二":2,
+    "兩":2,
+    "三":3,
+    "四":4,
+    "五":5,
+    "六":6,
+    "七":7,
+    "八":8,
+    "九":9
+  };
+
+  const unitMap={
+    "十":10,
+    "百":100,
+    "千":1000
+  };
+
+  let total=0;
+  let current=0;
+
+  for(let char of text){
+
+    if(char in digitMap){
+      current=digitMap[char];
+      continue;
+    }
+
+    if(char in unitMap){
+      total+=(current || 1)*unitMap[char];
+      current=0;
+    }
+  }
+
+  return total+current;
+}
+
+function getItemSortValue(item){
+
+  const arabicMatch=item.match(/\d+/);
+
+  if(arabicMatch){
+    return Number(arabicMatch[0]);
+  }
+
+  const chineseMatch=item.match(/[零一二兩三四五六七八九十百千]+/);
+
+  if(chineseMatch){
+    return chineseNumberToNumber(chineseMatch[0]);
+  }
+
+  return Infinity;
+}
+
+function compareItems(a,b){
+
+  const orderA=getItemSortValue(a);
+  const orderB=getItemSortValue(b);
+
+  if(orderA!==orderB){
+    return orderA-orderB;
+  }
+
+  return a.localeCompare(b,"zh-Hant");
+}
+
 function getDrawCount(playerCount){
 
   const value=Number(document.getElementById("drawCount").value);
@@ -867,7 +937,7 @@ let [name, nums]=line.split("：");
 
   const numbers=
     Object.keys(numberMap)
-    .sort((a,b)=>Number(a)-Number(b));
+    .sort(compareItems);
 
   for(let num of numbers){
 
@@ -973,7 +1043,7 @@ let [name, nums]=line.split("：");
 
     if(items.length){
 
-      items.sort((a,b)=>a-b);
+      items.sort(compareItems);
 
       output+=items.join("、");
       output+=`\n（共${items.length}樣）寄編：`;
@@ -995,13 +1065,21 @@ let [name, nums]=line.split("：");
     for(let num of resultMap[name]){
 
       allResults.push({
-        num:Number(num),
+        num,
+        sortValue:getItemSortValue(num),
         name
       });
     }
   }
 
-  allResults.sort((a,b)=>a.num-b.num);
+  allResults.sort((a,b)=>{
+
+    if(a.sortValue!==b.sortValue){
+      return a.sortValue-b.sortValue;
+    }
+
+    return a.num.localeCompare(b.num,"zh-Hant");
+  });
 
   for(let item of allResults){
 
