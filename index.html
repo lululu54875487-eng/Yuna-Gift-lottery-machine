@@ -108,6 +108,12 @@ button:hover{
   transform:scale(1.03);
 }
 
+button:disabled{
+  opacity:0.55;
+  cursor:not-allowed;
+  transform:none;
+}
+
 .primary{
   background:#ff5ca8;
   color:white;
@@ -394,12 +400,16 @@ input[type="number"]{
 
     <div class="btns">
 
-      <button class="primary" onclick="startLottery()">
+      <button id="startButton" class="primary" onclick="startLottery()">
         🎰 開始抽獎
       </button>
 
       <button class="secondary" onclick="skipAnimation()">
         ⏩ 跳過動畫
+      </button>
+
+      <button id="cancelButton" class="secondary" onclick="cancelLottery()" disabled>
+        ⛔ 取消抽獎
       </button>
 
       <button class="secondary" onclick="copyResult()">
@@ -447,6 +457,48 @@ input[type="number"]{
 <script>
 
 let skipMode = false;
+let isDrawing = false;
+let activeDrawId = 0;
+
+function escapeHtml(value){
+  return String(value)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll("\"","&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setDrawingState(active){
+
+  isDrawing = active;
+
+  const startButton=document.getElementById("startButton");
+  const cancelButton=document.getElementById("cancelButton");
+
+  if(startButton){
+    startButton.innerText=active ? "🔄 重新抽獎" : "🎰 開始抽獎";
+  }
+
+  if(cancelButton){
+    cancelButton.disabled=!active;
+  }
+}
+
+function isActiveDraw(drawId){
+  return isDrawing && drawId===activeDrawId;
+}
+
+async function waitForDraw(drawId, ms){
+  await sleep(ms);
+  return isActiveDraw(drawId);
+}
+
+function finishDraw(drawId){
+  if(drawId===activeDrawId){
+    setDrawingState(false);
+  }
+}
 
 function sleep(ms){
 
@@ -731,116 +783,113 @@ function createConfetti(){
   }
 }
 
-async function startLottery(){
-
-  skipMode = false;
-
-  const input=
-    document.getElementById("input").value.trim();
-
-  if(!input){
-    alert("請輸入抽獎清單");
-    return;
-  }
-
-const lines=input
-  .split("\n")
-  .map(v=>v.trim())
-  .filter(v=>v);
-// ===== 單純抽一人模式 =====
-
-const isSimpleMode =
-  !input.includes("：") &&
-  !input.includes(":") &&
-  !input.includes("➡️");
-
-if(isSimpleMode){
-document.getElementById("machineIcon").innerHTML = "🎰";
-  const players = input
-  .replaceAll("，",",")
-  .replaceAll("、",",")
-  .replaceAll("@",",")
-  .replaceAll("＠",",")
-  .replaceAll("\n",",")
-  .split(",")
-    .map(v=>v.trim())
-    .filter(v=>v);
-
-  if(players.length < 2){
-    alert("至少需要兩位參加者");
-    return;
-  }
-
-  const drawCount=getDrawCount(players.length);
-
-  const rolling =
-    document.getElementById("rollingText");
-
-  rolling.innerHTML = "🎰 抽籤開始！";
-
-  await sleep(800);
-
-  for(let i=0;i<(skipMode ? 1 : 20);i++){
-
-    rolling.innerHTML =
-      `🎲 抽籤中...<br>
-      <span class="final">
-      ${randomPick(players)}
-      </span>`;
-
-    await sleep(80);
-  }
-
-  const winners = randomSample(players, drawCount);
-  const winnerText = winners.join("、");
-
-  rolling.innerHTML =
-    `🎉 本次中獎者${drawCount>1 ? "們" : ""}<br>
-    <span class="final">
-    ${winnerText}
-    </span>`;
-
-  createConfetti();
-
-  document.getElementById("result").innerText =
-`🎉 本次抽籤結果：
-
-${winners.map((winner,index)=>`${index+1}. ✨ ${winner} ✨`).join("\n")}`;
-
-  return;
+function normalizeLotteryLine(line){
+  return line
+    .replaceAll(":", "：")
+    .replaceAll("➡️", "：")
+    .replaceAll("->", "：");
 }
-document.getElementById("machineIcon").innerHTML = "🧸";
+
+function splitFirstColon(line){
+  const index=line.indexOf("：");
+
+  if(index<0){
+    return [line,""];
+  }
+
+  return [
+    line.slice(0,index),
+    line.slice(index+1)
+  ];
+}
+
+function parseSimplePlayers(input){
+
+  const warnings=[];
+  const seen=new Set();
+  const players=[];
+
+  input
+    .replaceAll("，",",")
+    .replaceAll("、",",")
+    .replaceAll("@",",")
+    .replaceAll("＠",",")
+    .replaceAll("\n",",")
+    .split(",")
+    .map(v=>v.trim())
+    .filter(v=>v)
+    .forEach(name=>{
+
+      if(seen.has(name)){
+        warnings.push(`「${name}」重複出現，已自動只保留一次。`);
+        return;
+      }
+
+      seen.add(name);
+      players.push(name);
+    });
+
+  return {
+    players,
+    warnings
+  };
+}
+
+function parseGiftEntries(lines){
+
   const wants={};
   const numberMap={};
+  const warnings=[];
+  const errors=[];
 
-  for(let line of lines){
+  for(let originalLine of lines){
 
-line = line
+    const line=normalizeLotteryLine(originalLine);
 
-  .replaceAll(":", "：")
+    if(!line.includes("：")){
+      warnings.push(`已略過格式不完整的清單列：「${originalLine}」`);
+      continue;
+    }
 
-  .replaceAll("➡️", "：")
-
-  .replaceAll("->", "：");
-
-if(!line.includes("：")) continue;
-
-let [name, nums]=line.split("：");
+    let [name, nums]=splitFirstColon(line);
 
     name=name.trim();
+    nums=nums.trim();
 
-    nums=nums
-      .replaceAll("，",",")
-      .replaceAll("、",",");
+    if(!name){
+      errors.push(`清單列缺少姓名：「${originalLine}」`);
+      continue;
+    }
+
+    if(!nums){
+      errors.push(`「${name}」缺少想抽的號碼。`);
+      continue;
+    }
 
     const arr=nums
+      .replaceAll("，",",")
+      .replaceAll("、",",")
       .split(",")
       .map(v=>v.trim())
       .filter(v=>v);
 
-    wants[name]=[];
+    if(!arr.length){
+      errors.push(`「${name}」缺少有效號碼。`);
+      continue;
+    }
+
+    if(!wants[name]){
+      wants[name]=[];
+    }else{
+      warnings.push(`「${name}」有多列清單，已合併處理。`);
+    }
 
     for(let num of arr){
+
+      if(wants[name].includes(num)){
+        warnings.push(`「${name}」重複填寫 ${num} 號，已自動只保留一次。`);
+        continue;
+      }
 
       wants[name].push(num);
 
@@ -848,263 +897,491 @@ let [name, nums]=line.split("：");
         numberMap[num]=[];
       }
 
-      numberMap[num].push(name);
+      if(!numberMap[num].includes(name)){
+        numberMap[num].push(name);
+      }
     }
   }
 
-  const vipText=
-    document.getElementById("vipInput").value.trim();
+  if(!Object.keys(wants).length){
+    errors.push("沒有解析到任何有效抽獎清單。");
+  }
+
+  return {
+    wants,
+    numberMap,
+    warnings,
+    errors
+  };
+}
+
+function parseVipEntries(vipText, numberMap){
 
   const vipMap={};
+  const warnings=[];
+  const errors=[];
 
-  if(vipText){
-
-    const vipLines=vipText.split("\n");
-
-    for(let line of vipLines){
-
-    line = line
-
-      .replaceAll(":", "：")
-
-      .replaceAll("➡️", "：")
-
-      .replaceAll("->", "：");
-
-      if(!line.includes("：")) continue;
-
-      let [num,name]=line.split("：");
-
-      num=num.trim();
-      name=name.trim();
-
-      vipMap[num]=name;
-    }
+  if(!vipText){
+    return {
+      vipMap,
+      warnings,
+      errors
+    };
   }
 
-  const settings=getLotterySettings();
-  const reservedVipCounts={};
+  const vipLines=vipText
+    .split("\n")
+    .map(v=>v.trim())
+    .filter(v=>v);
 
-  if(settings.hasWinLimit && settings.vipCountsTowardLimit){
+  for(let originalLine of vipLines){
 
-    for(let vipName of Object.values(vipMap)){
+    const line=normalizeLotteryLine(originalLine);
 
-      if(!reservedVipCounts[vipName]){
-        reservedVipCounts[vipName]=0;
-      }
-
-      reservedVipCounts[vipName]++;
-    }
-  }
-
-  const resultMap={};
-  const winCount={};
-  const unassignedResults=[];
-
-  for(let name in wants){
-    resultMap[name]=[];
-    winCount[name]=reservedVipCounts[name] || 0;
-  }
-
-  for(let vipName of Object.values(vipMap)){
-
-    if(!resultMap[vipName]){
-      resultMap[vipName]=[];
+    if(!line.includes("：")){
+      warnings.push(`已略過格式不完整的 VIP 指定列：「${originalLine}」`);
+      continue;
     }
 
-    if(winCount[vipName]===undefined){
-      winCount[vipName]=reservedVipCounts[vipName] || 0;
+    let [num,name]=splitFirstColon(line);
+
+    num=num.trim();
+    name=name.trim();
+
+    if(!num || !name){
+      errors.push(`VIP 指定格式不完整：「${originalLine}」`);
+      continue;
     }
-  }
-
-  if(settings.hasWinLimit && settings.vipCountsTowardLimit){
-
-    const vipOverLimitNames=Object.keys(reservedVipCounts)
-      .filter(name=>reservedVipCounts[name] > settings.maxWins);
-
-    if(vipOverLimitNames.length){
-
-      alert(
-        `提醒：${vipOverLimitNames.join("、")} 的 VIP 指定數已超過每人最多 ${settings.maxWins} 樣，指定贈物仍會照常分配。`
-      );
-    }
-  }
-
-  const rolling=
-    document.getElementById("rollingText");
-
-  rolling.innerHTML="🎰 抽獎開始！";
-
-  await sleep(1000);
-
-  const numbers=
-    Object.keys(numberMap)
-    .sort(compareItems);
-
-  for(let num of numbers){
-
-    const players=numberMap[num];
-    const eligiblePlayers=settings.hasWinLimit
-      ? players.filter(name=>(winCount[name] || 0) < settings.maxWins)
-      : players;
 
     if(vipMap[num]){
 
-      const vipWinner=vipMap[num];
+      if(vipMap[num]===name){
+        warnings.push(`${num} 號重複指定給「${name}」，已自動只保留一次。`);
+      }else{
+        errors.push(`${num} 號被重複指定給「${vipMap[num]}」與「${name}」，請只保留一位。`);
+      }
 
-      rolling.innerHTML=
-        `👑 ${num} 號為特權指定<br>
-        <span class="final">${vipWinner}</span>`;
+      continue;
+    }
 
-      resultMap[vipWinner].push(num);
+    vipMap[num]=name;
+  }
+
+  for(let num in vipMap){
+
+    if(!numberMap[num]){
+      errors.push(`VIP 指定的 ${num} 號不在抽獎清單中，請確認號碼是否打錯。`);
+    }
+  }
+
+  return {
+    vipMap,
+    warnings,
+    errors
+  };
+}
+
+function showValidationFailure(errors, warnings){
+
+  const output=[
+    "⚠️ 抽獎前檢查未通過",
+    "",
+    "請先修正以下問題：",
+    ...errors.map((message,index)=>`${index+1}. ${message}`)
+  ];
+
+  if(warnings.length){
+    output.push(
+      "",
+      "提醒：",
+      ...warnings.map((message,index)=>`${index+1}. ${message}`)
+    );
+  }
+
+  document.getElementById("result").innerText=output.join("\n");
+  alert(`抽獎前檢查發現 ${errors.length} 個需要修正的問題，請看下方結果區。`);
+}
+
+function buildWarningText(warnings){
+
+  if(!warnings.length){
+    return "";
+  }
+
+  return [
+    "⚠️ 輸入檢查提醒",
+    "",
+    ...warnings.map((message,index)=>`${index+1}. ${message}`),
+    ""
+  ].join("\n");
+}
+
+async function startLottery(){
+
+  if(isDrawing){
+
+    if(!confirm("目前正在抽獎，要取消這輪並重新開始嗎？")){
+      return;
+    }
+
+    activeDrawId++;
+  }
+
+  skipMode = false;
+  const drawId=++activeDrawId;
+  setDrawingState(true);
+
+  try{
+
+    const input=
+      document.getElementById("input").value.trim();
+
+    if(!input){
+      alert("請輸入抽獎清單");
+      finishDraw(drawId);
+      return;
+    }
+
+    const drawStartedAt=new Date();
+    const drawTimeText=drawStartedAt.toLocaleString("zh-TW", {
+      hour12:false
+    });
+
+    const lines=input
+      .split("\n")
+      .map(v=>v.trim())
+      .filter(v=>v);
+
+    const isSimpleMode =
+      !input.includes("：") &&
+      !input.includes(":") &&
+      !input.includes("➡️");
+
+    const rolling =
+      document.getElementById("rollingText");
+
+    if(isSimpleMode){
+
+      document.getElementById("machineIcon").innerHTML = "🎰";
+
+      const parsedSimple=parseSimplePlayers(input);
+      const players=parsedSimple.players;
+      const warnings=[...parsedSimple.warnings];
+
+      if(players.length < 2){
+        showValidationFailure(["至少需要兩位參加者。"], warnings);
+        finishDraw(drawId);
+        return;
+      }
+
+      const drawCount=getDrawCount(players.length);
+
+      rolling.innerHTML = "🎰 抽籤開始！";
+
+      if(!await waitForDraw(drawId, 800)) return;
+
+      for(let i=0;i<(skipMode ? 1 : 20);i++){
+
+        rolling.innerHTML =
+          `🎲 抽籤中...<br>
+          <span class="final">
+          ${escapeHtml(randomPick(players))}
+          </span>`;
+
+        if(!await waitForDraw(drawId, 80)) return;
+      }
+
+      const winners = randomSample(players, drawCount);
+      const winnerText = winners.join("、");
+
+      rolling.innerHTML =
+        `🎉 本次中獎者${drawCount>1 ? "們" : ""}<br>
+        <span class="final">
+        ${escapeHtml(winnerText)}
+        </span>`;
 
       createConfetti();
 
-      await sleep(1500);
+      document.getElementById("result").innerText =
+`🎉 本次抽籤結果
 
-      continue;
+🧾 抽獎紀錄
+時間：${drawTimeText}
+模式：抽籤抽人
+有效參加者：${players.length} 位
+抽出人數：${drawCount} 位
+
+${buildWarningText(warnings)}${winners.map((winner,index)=>`${index+1}. ✨ ${winner} ✨`).join("\n")}`;
+
+      finishDraw(drawId);
+      return;
     }
 
-    if(!eligiblePlayers.length){
+    document.getElementById("machineIcon").innerHTML = "🧸";
 
-      rolling.innerHTML=
-        `⚠️ ${num} 號無可抽選得主<br>
-        <span class="final">已達上限</span>`;
+    const parsedGift=parseGiftEntries(lines);
+    const vipText=
+      document.getElementById("vipInput").value.trim();
+    const parsedVip=parseVipEntries(vipText, parsedGift.numberMap);
+    const warnings=[...parsedGift.warnings, ...parsedVip.warnings];
+    const errors=[...parsedGift.errors, ...parsedVip.errors];
 
-      unassignedResults.push({
-        num,
-        reason:"所有填選者已達中獎上限"
-      });
-
-      await sleep(1200);
-
-      continue;
+    if(errors.length){
+      showValidationFailure(errors, warnings);
+      finishDraw(drawId);
+      return;
     }
 
-    rolling.innerHTML=
-      `🎁 正在抽 ${num} 號`;
+    const wants=parsedGift.wants;
+    const numberMap=parsedGift.numberMap;
+    const vipMap=parsedVip.vipMap;
+    const settings=getLotterySettings();
+    const reservedVipCounts={};
 
-    await sleep(700);
+    if(settings.hasWinLimit && settings.vipCountsTowardLimit){
 
-    let winner="";
+      for(let vipName of Object.values(vipMap)){
 
-    if(eligiblePlayers.length===1){
+        if(!reservedVipCounts[vipName]){
+          reservedVipCounts[vipName]=0;
+        }
 
-      winner=eligiblePlayers[0];
+        reservedVipCounts[vipName]++;
+      }
+    }
 
-      rolling.innerHTML=
-        `✨ ${num} 號直接得主：<br>
-        <span class="final">${winner}</span>`;
+    const resultMap={};
+    const winCount={};
+    const unassignedResults=[];
 
-    }else{
+    for(let name in wants){
+      resultMap[name]=[];
+      winCount[name]=reservedVipCounts[name] || 0;
+    }
 
-      for(let i=0;i<(skipMode ? 1 : 15);i++){
+    for(let vipName of Object.values(vipMap)){
 
-        rolling.innerHTML=
-          `🎰 ${num} 號抽選中...<br>
-          <span class="final">
-          ${randomPick(eligiblePlayers)}
-          </span>`;
-
-        await sleep(80);
+      if(!resultMap[vipName]){
+        resultMap[vipName]=[];
       }
 
-      winner=randomPick(eligiblePlayers);
+      if(winCount[vipName]===undefined){
+        winCount[vipName]=reservedVipCounts[vipName] || 0;
+      }
+    }
+
+    if(settings.hasWinLimit && settings.vipCountsTowardLimit){
+
+      const vipOverLimitNames=Object.keys(reservedVipCounts)
+        .filter(name=>reservedVipCounts[name] > settings.maxWins);
+
+      if(vipOverLimitNames.length){
+
+        warnings.push(
+          `${vipOverLimitNames.join("、")} 的 VIP 指定數已超過每人最多 ${settings.maxWins} 樣，指定贈物仍照常分配。`
+        );
+      }
+    }
+
+    rolling.innerHTML="🎰 抽獎開始！";
+
+    if(!await waitForDraw(drawId, 1000)) return;
+
+    const numbers=
+      Object.keys(numberMap)
+      .sort(compareItems);
+
+    for(let num of numbers){
+
+      const players=numberMap[num];
+      const eligiblePlayers=settings.hasWinLimit
+        ? players.filter(name=>(winCount[name] || 0) < settings.maxWins)
+        : players;
+
+      if(vipMap[num]){
+
+        const vipWinner=vipMap[num];
+
+        rolling.innerHTML=
+          `👑 ${escapeHtml(num)} 號為特權指定<br>
+          <span class="final">${escapeHtml(vipWinner)}</span>`;
+
+        resultMap[vipWinner].push(num);
+
+        createConfetti();
+
+        if(!await waitForDraw(drawId, 1500)) return;
+
+        continue;
+      }
+
+      if(!eligiblePlayers.length){
+
+        rolling.innerHTML=
+          `⚠️ ${escapeHtml(num)} 號無可抽選得主<br>
+          <span class="final">已達上限</span>`;
+
+        unassignedResults.push({
+          num,
+          reason:"所有填選者已達中獎上限"
+        });
+
+        if(!await waitForDraw(drawId, 1200)) return;
+
+        continue;
+      }
 
       rolling.innerHTML=
-        `🎉 ${num} 號得主：<br>
-        <span class="final">${winner}</span>`;
+        `🎁 正在抽 ${escapeHtml(num)} 號`;
+
+      if(!await waitForDraw(drawId, 700)) return;
+
+      let winner="";
+
+      if(eligiblePlayers.length===1){
+
+        winner=eligiblePlayers[0];
+
+        rolling.innerHTML=
+          `✨ ${escapeHtml(num)} 號直接得主：<br>
+          <span class="final">${escapeHtml(winner)}</span>`;
+
+      }else{
+
+        for(let i=0;i<(skipMode ? 1 : 15);i++){
+
+          rolling.innerHTML=
+            `🎰 ${escapeHtml(num)} 號抽選中...<br>
+            <span class="final">
+            ${escapeHtml(randomPick(eligiblePlayers))}
+            </span>`;
+
+          if(!await waitForDraw(drawId, 80)) return;
+        }
+
+        winner=randomPick(eligiblePlayers);
+
+        rolling.innerHTML=
+          `🎉 ${escapeHtml(num)} 號得主：<br>
+          <span class="final">${escapeHtml(winner)}</span>`;
+      }
+
+      resultMap[winner].push(num);
+
+      if(settings.hasWinLimit){
+        winCount[winner]=(winCount[winner] || 0)+1;
+      }
+
+      createConfetti();
+
+      if(!await waitForDraw(drawId, 1500)) return;
     }
 
-    resultMap[winner].push(num);
+    let output="🎁 抽選結果清單\n\n";
+
+    output+="🧾 抽獎紀錄\n";
+    output+=`時間：${drawTimeText}\n`;
+    output+="模式：贈物號碼抽選\n";
+    output+=`有效參加者：${Object.keys(wants).length} 位\n`;
+    output+=`有效號碼：${numbers.length} 個\n`;
+    output+=`VIP 指定：${Object.keys(vipMap).length} 個\n`;
 
     if(settings.hasWinLimit){
-      winCount[winner]=(winCount[winner] || 0)+1;
-    }
 
-    createConfetti();
-
-    await sleep(1500);
-  }
-
-  let output="🎁 抽選結果清單\n\n";
-
-  if(settings.hasWinLimit){
-
-    output+=`⚙️ 中獎限制：每人最多 ${settings.maxWins} 樣`;
-    output+=settings.vipCountsTowardLimit
-      ? "｜VIP 指定計入中獎數\n\n"
-      : "｜VIP 指定不計入中獎數\n\n";
-  }
-
-  for(let name in resultMap){
-
-    const items=resultMap[name];
-
-    output+=`${name}：`;
-
-    if(items.length){
-
-      items.sort(compareItems);
-
-      output+=items.join("、");
-      output+=`\n（共${items.length}樣）寄編：`;
-
+      output+=`中獎限制：每人最多 ${settings.maxWins} 樣`;
+      output+=settings.vipCountsTowardLimit
+        ? "｜VIP 指定計入中獎數\n"
+        : "｜VIP 指定不計入中獎數\n";
     }else{
-
-      output+="未抽中";
+      output+="中獎限制：不限\n";
     }
 
-    output+="\n\n";
-  }
+    output+="\n";
+    output+=buildWarningText(warnings);
 
-  output+="📦 各號碼得主對照\n\n";
+    for(let name in resultMap){
 
-  const allResults=[];
+      const items=resultMap[name];
 
-  for(let name in resultMap){
+      output+=`${name}：`;
 
-    for(let num of resultMap[name]){
+      if(items.length){
 
-      allResults.push({
-        num,
-        sortValue:getItemSortValue(num),
-        name
-      });
+        items.sort(compareItems);
+
+        output+=items.join("、");
+        output+=`\n（共${items.length}樣）寄編：`;
+
+      }else{
+
+        output+="未抽中";
+      }
+
+      output+="\n\n";
     }
-  }
 
-  allResults.sort((a,b)=>{
+    output+="📦 各號碼得主對照\n\n";
 
-    if(a.sortValue!==b.sortValue){
-      return a.sortValue-b.sortValue;
+    const allResults=[];
+
+    for(let name in resultMap){
+
+      for(let num of resultMap[name]){
+
+        allResults.push({
+          num,
+          sortValue:getItemSortValue(num),
+          name
+        });
+      }
     }
 
-    return a.num.localeCompare(b.num,"zh-Hant");
-  });
+    allResults.sort((a,b)=>{
 
-  for(let item of allResults){
+      if(a.sortValue!==b.sortValue){
+        return a.sortValue-b.sortValue;
+      }
 
-    output+=`${item.num} ➡️ ${item.name}\n`;
-  }
+      return a.num.localeCompare(b.num,"zh-Hant");
+    });
 
-  if(unassignedResults.length){
+    for(let item of allResults){
 
-    output+="\n⚠️ 未抽出號碼\n\n";
-
-    for(let item of unassignedResults){
-      output+=`${item.num}：${item.reason}\n`;
+      output+=`${item.num} ➡️ ${item.name}\n`;
     }
+
+    if(unassignedResults.length){
+
+      output+="\n⚠️ 未抽出號碼\n\n";
+
+      for(let item of unassignedResults){
+        output+=`${item.num}：${item.reason}\n`;
+      }
+    }
+
+    document.getElementById("result").innerText=
+      output;
+
+    rolling.innerHTML=
+      "🎊 全部抽獎完成！";
+
+    finishDraw(drawId);
+
+  }catch(error){
+
+    console.error(error);
+    document.getElementById("result").innerText=
+      `⚠️ 抽獎時發生錯誤：${error.message}`;
+    finishDraw(drawId);
   }
-
-  document.getElementById("result").innerText=
-    output;
-
-  rolling.innerHTML=
-    "🎊 全部抽獎完成！";
 }
 
 function skipAnimation(){
+
+  if(!isDrawing){
+    alert("目前沒有正在進行的抽獎");
+    return;
+  }
 
   skipMode = true;
 
@@ -1112,17 +1389,40 @@ function skipAnimation(){
     "⏩ 已跳過後續動畫";
 }
 
-function copyResult(){
+function cancelLottery(){
+
+  if(!isDrawing){
+    return;
+  }
+
+  activeDrawId++;
+  skipMode = true;
+  setDrawingState(false);
+
+  document.getElementById("rollingText").innerHTML =
+    "⛔ 抽獎已取消";
+}
+
+async function copyResult(){
 
   const text=
     document.getElementById("result").innerText;
 
-  navigator.clipboard.writeText(text);
+  try{
 
-  alert("已複製抽獎結果 ✨");
+    await navigator.clipboard.writeText(text);
+    alert("已複製抽獎結果 ✨");
+
+  }catch(error){
+    alert("複製失敗，可能是瀏覽器權限限制。請直接選取結果文字複製。");
+  }
 }
 
 function clearResult(){
+
+  activeDrawId++;
+  skipMode = true;
+  setDrawingState(false);
 
   document.getElementById("result").innerText=
 
@@ -1141,6 +1441,10 @@ function clearAll(){
   if(!confirm("確定要清空全部內容嗎？")){
     return;
   }
+
+  activeDrawId++;
+  skipMode = true;
+  setDrawingState(false);
 
   document.getElementById("input").value="";
 
