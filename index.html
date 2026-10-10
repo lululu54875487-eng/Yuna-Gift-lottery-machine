@@ -967,7 +967,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
   const rolling = document.getElementById("rollingText");
   document.getElementById("machineIcon").innerHTML = "🧸";
 
-  rolling.innerHTML = "🎁 品項認購抽獎開始！";
+  rolling.innerHTML = "🎁 品項認領抽獎開始！";
 
   if(!await waitForDraw(drawId, 800)) return;
 
@@ -1037,7 +1037,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
     hour12: false
   });
 
-  let output = "🎁 品項認購抽獎結果\n\n";
+  let output = "🎁 品項認領抽獎結果\n\n";
 
   output += `時間：${drawTimeText}\n`;
   output += "模式：依品項認領者抽出得主\n";
@@ -1332,7 +1332,7 @@ async function startLottery(){
       .filter(v=>v);
       
       
-    // 偵測品項認購格式，例如：(1)黛珂粉底液：知知、螞蟻
+    // 偵測品項認領格式，例如：(1)黛珂粉底液：知知、螞蟻
     const isItemMode = lines.some(line =>
       /^\s*[（(]\s*\d+\s*[）)]\s*[^：:]+[：:]/.test(line)
     );
