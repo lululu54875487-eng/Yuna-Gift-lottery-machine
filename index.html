@@ -832,7 +832,7 @@ function parseItemEntries(lines){
     const nameText = line.slice(colonIndex + 1).trim();
 
     if(!itemName || !nameText){
-      errors.push(`品項或認購者名單為空：${originalLine}`);
+      errors.push(`品項或認領者名單為空：${originalLine}`);
       continue;
     }
 
@@ -871,7 +871,7 @@ function parseItemEntries(lines){
       });
 
     if(!participants.length){
-      errors.push(`${itemName} 沒有有效認購者。`);
+      errors.push(`${itemName} 沒有有效認領者。`);
       continue;
     }
 
@@ -925,7 +925,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
 
     if(!item.participants.includes(winnerName)){
       errors.push(
-        `${itemName} 的 VIP 得主「${winnerName}」不在認購名單中。`
+        `${itemName} 的 VIP 得主「${winnerName}」不在認領名單中。`
       );
       continue;
     }
@@ -1004,7 +1004,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
 
         rolling.innerHTML =
           `⚠️ ${escapeHtml(item.name)}<br>
-          <span class="final">所有認購者均已達中獎上限</span>`;
+          <span class="final">所有認領者均已達中獎上限</span>`;
 
         if(!await waitForDraw(drawId, 700)) return;
         continue;
@@ -1038,9 +1038,9 @@ async function runItemLottery(lines, drawId, drawStartedAt){
   let output = "🎁 品項認購抽獎結果\n\n";
 
   output += `時間：${drawTimeText}\n`;
-  output += "模式：依品項認購者抽出得主\n";
+  output += "模式：依品項認領者抽出得主\n";
   output += `有效品項：${parsed.items.length} 個\n`;
-  output += `有效認購者：${
+  output += `有效認領者：${
     new Set(parsed.items.flatMap(item => item.participants)).size
   } 位\n`;
 
@@ -1071,7 +1071,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
   if(unassigned.length){
     output += "⚠️ 未抽出得主的品項\n";
     unassigned.forEach(name => {
-      output += `${name}：認購者均已達中獎上限\n`;
+      output += `${name}：認領者均已達中獎上限\n`;
     });
   }
 
