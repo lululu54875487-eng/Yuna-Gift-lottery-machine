@@ -1081,17 +1081,6 @@ async function runItemLottery(lines, drawId, drawStartedAt){
 
 
 function parseSimplePlayers(input){
-  
-    // 新格式：(1)品項名稱：認購者、認購者
-    const isItemMode = lines.some(line =>
-      /^\s*[（(]\s*\d+\s*[）)]\s*[^：:]+[：:]/.test(line)
-    );
-
-    if(isItemMode){
-      await runItemLottery(lines, drawId, drawStartedAt);
-      finishDraw(drawId);
-      return;
-    }
 
   const warnings=[];
   const seen=new Set();
@@ -1339,6 +1328,19 @@ async function startLottery(){
       .split("\n")
       .map(v=>v.trim())
       .filter(v=>v);
+      
+      
+    // 偵測品項認購格式，例如：(1)黛珂粉底液：知知、螞蟻
+    const isItemMode = lines.some(line =>
+      /^\s*[（(]\s*\d+\s*[）)]\s*[^：:]+[：:]/.test(line)
+    );
+
+    if(isItemMode){
+      await runItemLottery(lines, drawId, drawStartedAt);
+      finishDraw(drawId);
+      return;
+    }
+
 
     const isSimpleMode =
       !input.includes("：") &&
