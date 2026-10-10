@@ -1019,7 +1019,9 @@ async function runItemLottery(lines, drawId, drawStartedAt){
         vip: false
       });
 
-      winCount[winner] = (winCount[winner] || 0) + 1;
+      if(settings.hasWinLimit){
+  winCount[winner] = (winCount[winner] || 0) + 1;
+}
 
       rolling.innerHTML =
         `🎉 ${escapeHtml(item.name)}<br>
