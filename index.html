@@ -1067,7 +1067,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
     output += `${index + 1}. ${result.item}\n`;
     output += `   得主：${result.winner}`;
     output += result.vip ? "（VIP 指定）\n" : "\n";
-    output += `   認購人數：${result.count} 位\n\n`;
+    output += `   抽獎人數：${result.count} 位\n\n`;
   });
 
   if(unassigned.length){
