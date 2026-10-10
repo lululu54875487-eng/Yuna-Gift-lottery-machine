@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8" />
@@ -803,12 +803,300 @@ function splitFirstColon(line){
   ];
 }
 
+function parseItemEntries(lines){
+
+  const items = [];
+  const warnings = [];
+  const errors = [];
+  const seenItems = new Set();
+
+  for(const originalLine of lines){
+
+    // 支援 (1)、（1）、1.、1、等品項編號
+    const line = originalLine
+      .trim()
+      .replace(/^[（(]\s*\d+\s*[）)]\s*/, "")
+      .replace(/^\d+\s*[.、．]\s*/, "")
+      .replaceAll("：", ":")
+      .replaceAll("➡️", ":")
+      .replaceAll("->", ":");
+
+    const colonIndex = line.indexOf(":");
+
+    if(colonIndex < 0){
+      errors.push(`格式不完整：${originalLine}`);
+      continue;
+    }
+
+    const itemName = line.slice(0, colonIndex).trim();
+    const nameText = line.slice(colonIndex + 1).trim();
+
+    if(!itemName || !nameText){
+      errors.push(`品項或認購者名單為空：${originalLine}`);
+      continue;
+    }
+
+    const key = normalizeForSimilarity(itemName);
+
+    if(seenItems.has(key)){
+      errors.push(`品項名稱重複：${itemName}`);
+      continue;
+    }
+
+    seenItems.add(key);
+
+    const participants = [];
+    const seenNames = new Set();
+
+    nameText
+      .replaceAll("，", ",")
+      .replaceAll("、", ",")
+      .replaceAll("＠", "@")
+      .split(/[,，、\n@]+/)
+      .map(name => name.trim())
+      .filter(Boolean)
+      .forEach(name => {
+
+        const nameKey = normalizeForSimilarity(name);
+
+        if(seenNames.has(nameKey)){
+          warnings.push(
+            `${itemName} 中的「${name}」重複出現，已去除重複。`
+          );
+          return;
+        }
+
+        seenNames.add(nameKey);
+        participants.push(name);
+      });
+
+    if(!participants.length){
+      errors.push(`${itemName} 沒有有效認購者。`);
+      continue;
+    }
+
+    items.push({
+      name: itemName,
+      participants
+    });
+  }
+
+  if(!items.length){
+    errors.push("沒有解析到有效品項。");
+  }
+
+  return { items, warnings, errors };
+}
+
+async function runItemLottery(lines, drawId, drawStartedAt){
+
+  const parsed = parseItemEntries(lines);
+  const warnings = [...parsed.warnings];
+  const errors = [...parsed.errors];
+
+  const vipText =
+    document.getElementById("vipInput").value.trim();
+
+  const vipMap = {};
+
+  // 品項模式的 VIP 格式：品項名稱：得主姓名
+  for(const originalLine of vipText.split("\n").filter(v => v.trim())){
+
+    const line = normalizeLotteryLine(originalLine);
+    const [rawItem, rawName] = splitFirstColon(line);
+
+    const itemName = rawItem.trim();
+    const winnerName = rawName.trim();
+
+    if(!itemName || !winnerName){
+      errors.push(`VIP 指定格式不完整：${originalLine}`);
+      continue;
+    }
+
+    const item = parsed.items.find(
+      item => normalizeForSimilarity(item.name) ===
+              normalizeForSimilarity(itemName)
+    );
+
+    if(!item){
+      errors.push(`VIP 指定的品項不存在：${itemName}`);
+      continue;
+    }
+
+    if(!item.participants.includes(winnerName)){
+      errors.push(
+        `${itemName} 的 VIP 得主「${winnerName}」不在認購名單中。`
+      );
+      continue;
+    }
+
+    if(vipMap[item.name]){
+      errors.push(`${itemName} 被重複指定 VIP 得主。`);
+      continue;
+    }
+
+    vipMap[item.name] = winnerName;
+  }
+
+  if(errors.length){
+    showValidationFailure(errors, warnings);
+    return;
+  }
+
+  const settings = getLotterySettings();
+  const winCount = {};
+  const results = [];
+  const unassigned = [];
+
+  // 先計算 VIP 指定得主是否佔用中獎名額
+  if(settings.hasWinLimit && settings.vipCountsTowardLimit){
+
+    Object.values(vipMap).forEach(name => {
+      winCount[name] = (winCount[name] || 0) + 1;
+    });
+
+    for(const [name, count] of Object.entries(winCount)){
+      if(count > settings.maxWins){
+        warnings.push(
+          `VIP 得主「${name}」的指定品項數已超過每人最多 ${settings.maxWins} 樣。`
+        );
+      }
+    }
+  }
+
+  const rolling = document.getElementById("rollingText");
+  document.getElementById("machineIcon").innerHTML = "🧸";
+
+  rolling.innerHTML = "🎁 品項認購抽獎開始！";
+
+  if(!await waitForDraw(drawId, 800)) return;
+
+  for(const item of parsed.items){
+
+    if(!isActiveDraw(drawId)) return;
+
+    const vipWinner = vipMap[item.name];
+
+    if(vipWinner){
+
+      results.push({
+        item: item.name,
+        winner: vipWinner,
+        count: item.participants.length,
+        vip: true
+      });
+
+      rolling.innerHTML =
+        `👑 ${escapeHtml(item.name)}<br>
+        <span class="final">${escapeHtml(vipWinner)}</span>`;
+
+    }else{
+
+      const eligible = settings.hasWinLimit
+        ? item.participants.filter(name =>
+            (winCount[name] || 0) < settings.maxWins
+          )
+        : item.participants;
+
+      if(!eligible.length){
+
+        unassigned.push(item.name);
+
+        rolling.innerHTML =
+          `⚠️ ${escapeHtml(item.name)}<br>
+          <span class="final">所有認購者均已達中獎上限</span>`;
+
+        if(!await waitForDraw(drawId, 700)) return;
+        continue;
+      }
+
+      const winner = randomPick(eligible);
+
+      results.push({
+        item: item.name,
+        winner,
+        count: item.participants.length,
+        vip: false
+      });
+
+      winCount[winner] = (winCount[winner] || 0) + 1;
+
+      rolling.innerHTML =
+        `🎉 ${escapeHtml(item.name)}<br>
+        <span class="final">${escapeHtml(winner)}</span>`;
+    }
+
+    createConfetti();
+
+    if(!await waitForDraw(drawId, 1000)) return;
+  }
+
+  const drawTimeText = drawStartedAt.toLocaleString("zh-TW", {
+    hour12: false
+  });
+
+  let output = "🎁 品項認購抽獎結果\n\n";
+
+  output += `時間：${drawTimeText}\n`;
+  output += "模式：依品項認購者抽出得主\n";
+  output += `有效品項：${parsed.items.length} 個\n`;
+  output += `有效認購者：${
+    new Set(parsed.items.flatMap(item => item.participants)).size
+  } 位\n`;
+
+  if(settings.hasWinLimit){
+    output += `中獎限制：每人最多 ${settings.maxWins} 樣\n`;
+    output += `VIP 指定${settings.vipCountsTowardLimit
+      ? "計入"
+      : "不計入"}中獎數\n`;
+  }else{
+    output += "中獎限制：不限\n";
+  }
+
+  output += "\n";
+
+  if(warnings.length){
+    output += buildWarningText(warnings) + "\n";
+  }
+
+  output += "🏆 各品項得主\n\n";
+
+  results.forEach((result, index) => {
+    output += `${index + 1}. ${result.item}\n`;
+    output += `   得主：${result.winner}`;
+    output += result.vip ? "（VIP 指定）\n" : "\n";
+    output += `   認購人數：${result.count} 位\n\n`;
+  });
+
+  if(unassigned.length){
+    output += "⚠️ 未抽出得主的品項\n";
+    unassigned.forEach(name => {
+      output += `${name}：認購者均已達中獎上限\n`;
+    });
+  }
+
+  document.getElementById("result").innerText = output;
+  rolling.innerHTML = "🎊 品項抽獎完成！";
+}
+
+
 function parseSimplePlayers(input){
+  
+    // 新格式：(1)品項名稱：認購者、認購者
+    const isItemMode = lines.some(line =>
+      /^\s*[（(]\s*\d+\s*[）)]\s*[^：:]+[：:]/.test(line)
+    );
+
+    if(isItemMode){
+      await runItemLottery(lines, drawId, drawStartedAt);
+      finishDraw(drawId);
+      return;
+    }
 
   const warnings=[];
   const seen=new Set();
   const players=[];
-
+  
   input
     .replaceAll("，",",")
     .replaceAll("、",",")
