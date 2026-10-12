@@ -680,6 +680,14 @@ function normalizeForSimilarity(text){
     .trim();
 }
 
+function normalizeLotteryNumber(text){
+  return normalizeForSimilarity(text);
+}
+
+function sameName(a,b){
+  return normalizeForSimilarity(a)===normalizeForSimilarity(b);
+}
+
 function extractInputItems(text){
 
   const items=[];
@@ -784,10 +792,10 @@ function createConfetti(){
 }
 
 function normalizeLotteryLine(line){
-  return line
-    .replaceAll(":", "：")
+  return toHalfWidth(line)
     .replaceAll("➡️", "：")
-    .replaceAll("->", "：");
+    .replaceAll("->", "：")
+    .replaceAll(":", "：");
 }
 
 function splitFirstColon(line){
@@ -813,23 +821,19 @@ function parseItemEntries(lines){
   for(const originalLine of lines){
 
     // 支援 (1)、（1）、1.、1、等品項編號
-    const line = originalLine
+    const line = normalizeLotteryLine(originalLine)
       .trim()
-      .replace(/^[（(]\s*\d+\s*[）)]\s*/, "")
-      .replace(/^\d+\s*[.、．]\s*/, "")
-      .replaceAll("：", ":")
-      .replaceAll("➡️", ":")
-      .replaceAll("->", ":");
+      .replace(/^\(\s*\d+\s*\)\s*/, "")
+      .replace(/^\d+\s*[.,]\s*/, "");
 
-    const colonIndex = line.indexOf(":");
-
-    if(colonIndex < 0){
+    if(!line.includes("：")){
       errors.push(`格式不完整：${originalLine}`);
       continue;
     }
 
-    const itemName = line.slice(0, colonIndex).trim();
-    const nameText = line.slice(colonIndex + 1).trim();
+    const [rawItemName, rawNameText] = splitFirstColon(line);
+    const itemName = rawItemName.trim();
+    const nameText = rawNameText.trim();
 
     if(!itemName || !nameText){
       errors.push(`品項或認領者名單為空：${originalLine}`);
@@ -849,10 +853,7 @@ function parseItemEntries(lines){
     const seenNames = new Set();
 
     nameText
-      .replaceAll("，", ",")
-      .replaceAll("、", ",")
-      .replaceAll("＠", "@")
-      .split(/[,，、\n@]+/)
+      .split(/[,\n@]+/)
       .map(name => name.trim())
       .filter(Boolean)
       .forEach(name => {
@@ -923,7 +924,11 @@ async function runItemLottery(lines, drawId, drawStartedAt){
       continue;
     }
 
-    if(!item.participants.includes(winnerName)){
+    const matchedWinner = item.participants.find(name =>
+      sameName(name, winnerName)
+    );
+
+    if(!matchedWinner){
       errors.push(
         `${itemName} 的 VIP 得主「${winnerName}」不在認領名單中。`
       );
@@ -935,7 +940,7 @@ async function runItemLottery(lines, drawId, drawStartedAt){
       continue;
     }
 
-    vipMap[item.name] = winnerName;
+    vipMap[item.name] = matchedWinner;
   }
 
   if(errors.length){
@@ -1099,12 +1104,14 @@ function parseSimplePlayers(input){
     .filter(v=>v)
     .forEach(name=>{
 
-      if(seen.has(name)){
+      const nameKey=normalizeForSimilarity(name);
+
+      if(seen.has(nameKey)){
         warnings.push(`「${name}」重複出現，已自動只保留一次。`);
         return;
       }
 
-      seen.add(name);
+      seen.add(nameKey);
       players.push(name);
     });
 
@@ -1118,6 +1125,7 @@ function parseGiftEntries(lines){
 
   const wants={};
   const numberMap={};
+  const displayNameByKey={};
   const warnings=[];
   const errors=[];
 
@@ -1134,8 +1142,9 @@ function parseGiftEntries(lines){
 
     name=name.trim();
     nums=nums.trim();
+    const nameKey=normalizeForSimilarity(name);
 
-    if(!name){
+    if(!nameKey){
       errors.push(`清單列缺少姓名：「${originalLine}」`);
       continue;
     }
@@ -1146,10 +1155,8 @@ function parseGiftEntries(lines){
     }
 
     const arr=nums
-      .replaceAll("，",",")
-      .replaceAll("、",",")
       .split(",")
-      .map(v=>v.trim())
+      .map(v=>normalizeLotteryNumber(v))
       .filter(v=>v);
 
     if(!arr.length){
@@ -1157,27 +1164,35 @@ function parseGiftEntries(lines){
       continue;
     }
 
-    if(!wants[name]){
-      wants[name]=[];
+    const displayName=displayNameByKey[nameKey] || name;
+
+    if(!displayNameByKey[nameKey]){
+      displayNameByKey[nameKey]=displayName;
+    }else if(displayName!==name){
+      warnings.push(`「${name}」與「${displayName}」看起來是同一位，已合併處理。`);
+    }
+
+    if(!wants[displayName]){
+      wants[displayName]=[];
     }else{
-      warnings.push(`「${name}」有多列清單，已合併處理。`);
+      warnings.push(`「${displayName}」有多列清單，已合併處理。`);
     }
 
     for(let num of arr){
 
-      if(wants[name].includes(num)){
-        warnings.push(`「${name}」重複填寫 ${num} 號，已自動只保留一次。`);
+      if(wants[displayName].includes(num)){
+        warnings.push(`「${displayName}」重複填寫 ${num} 號，已自動只保留一次。`);
         continue;
       }
 
-      wants[name].push(num);
+      wants[displayName].push(num);
 
       if(!numberMap[num]){
         numberMap[num]=[];
       }
 
-      if(!numberMap[num].includes(name)){
-        numberMap[num].push(name);
+      if(!numberMap[num].some(player => sameName(player, displayName))){
+        numberMap[num].push(displayName);
       }
     }
   }
@@ -1224,7 +1239,7 @@ function parseVipEntries(vipText, numberMap){
 
     let [num,name]=splitFirstColon(line);
 
-    num=num.trim();
+    num=normalizeLotteryNumber(num);
     name=name.trim();
 
     if(!num || !name){
@@ -1232,25 +1247,32 @@ function parseVipEntries(vipText, numberMap){
       continue;
     }
 
+    const candidates=numberMap[num];
+
+    if(!candidates){
+      errors.push(`VIP 指定的 ${num} 號不在抽獎清單中，請確認號碼是否打錯。`);
+      continue;
+    }
+
+    const matchedName=candidates.find(player => sameName(player, name));
+
+    if(!matchedName){
+      errors.push(`VIP 指定的 ${num} 號得主「${name}」沒有填選該號碼。`);
+      continue;
+    }
+
     if(vipMap[num]){
 
-      if(vipMap[num]===name){
-        warnings.push(`${num} 號重複指定給「${name}」，已自動只保留一次。`);
+      if(sameName(vipMap[num], matchedName)){
+        warnings.push(`${num} 號重複指定給「${matchedName}」，已自動只保留一次。`);
       }else{
-        errors.push(`${num} 號被重複指定給「${vipMap[num]}」與「${name}」，請只保留一位。`);
+        errors.push(`${num} 號被重複指定給「${vipMap[num]}」與「${matchedName}」，請只保留一位。`);
       }
 
       continue;
     }
 
-    vipMap[num]=name;
-  }
-
-  for(let num in vipMap){
-
-    if(!numberMap[num]){
-      errors.push(`VIP 指定的 ${num} 號不在抽獎清單中，請確認號碼是否打錯。`);
-    }
+    vipMap[num]=matchedName;
   }
 
   return {
@@ -1332,9 +1354,9 @@ async function startLottery(){
       .filter(v=>v);
       
       
-    // 偵測品項認領格式，例如：(1)黛珂粉底液：知知、螞蟻
+    // 偵測品項認領格式，例如：(1)黛珂粉底液：知知、螞蟻，或 1. 黛珂粉底液：知知、螞蟻
     const isItemMode = lines.some(line =>
-      /^\s*[（(]\s*\d+\s*[）)]\s*[^：:]+[：:]/.test(line)
+      /^\s*(?:[（(]\s*[0-9０-９]+\s*[）)]|[0-9０-９]+\s*[.、．])\s*[^：:]+[：:]/.test(line)
     );
 
     if(isItemMode){
